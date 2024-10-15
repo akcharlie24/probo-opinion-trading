@@ -64,10 +64,17 @@ app.post("/user/create/:userId", (req, res) => {
     return;
   }
 
+  if (userId in INR_BALANCES) {
+    res.status(400).json({ message: "User already exists" });
+    return;
+  }
+
   INR_BALANCES[userId] = {
     balance: 0,
     locked: 0,
   };
+
+  STOCK_BALANCES[userId] = {};
 
   res.status(201).json({ message: `User ${userId} created` });
 });
@@ -112,12 +119,18 @@ app.get("/balances/stock", (req, res) => {
 
 app.get("/balance/inr/:userId", (req, res) => {
   const userId = req.params.userId;
-
+  if (!(userId in INR_BALANCES)) {
+    res.status(404).json({ message: "User doesnt exist" });
+  }
   res.status(200).json({ balance: INR_BALANCES[userId].balance });
 });
 
 app.post("/onramp/inr", (req, res) => {
   const { userId, amount } = req.body;
+
+  if (!(userId in INR_BALANCES)) {
+    res.status(404).json({ message: "User doesnt exist" });
+  }
 
   INR_BALANCES[userId].balance =
     INR_BALANCES[userId].balance + parseInt(amount);
@@ -131,10 +144,12 @@ app.get("/balance/stock/:userId", (req, res) => {
   res.status(200).send(STOCK_BALANCES[userId]);
 });
 
-app.post("/order/buy/yes", (req, res) => {});
-
 app.post("/trade/mint", (req, res) => {
   let { userId, stockSymbol, quantity, price } = req.body;
+
+  if (!(userId in INR_BALANCES)) {
+    res.status(404).json({ message: "User doesnt exist" });
+  }
 
   quantity = parseInt(quantity);
   const priceOfTokens = quantity * 2 * price;
@@ -147,7 +162,7 @@ app.post("/trade/mint", (req, res) => {
 
   INR_BALANCES[userId].balance -= priceOfTokens;
 
-  const userStocks = STOCK_BALANCES[userId];
+  const userStocks = Object.keys(STOCK_BALANCES[userId]);
 
   if (stockSymbol in userStocks) {
     STOCK_BALANCES[userId][stockSymbol] = {
@@ -212,17 +227,16 @@ app.post("/order/sell", (req, res) => {
     return;
   }
 
-  INR_BALANCES[userId].STOCK_BALANCES[userId][stockSymbol][
-    stockType
-  ].quantity -= quantity;
+  STOCK_BALANCES[userId][stockSymbol][stockType].quantity -= quantity;
   STOCK_BALANCES[userId][stockSymbol][stockType].locked += quantity;
 
   const priceString = priceToSell.toString();
 
   if (!(stockSymbol in ORDERBOOK)) ORDERBOOK[stockSymbol] = {};
-  if (!(stockType in ORDERBOOK)) ORDERBOOK[stockSymbol][stockType] = {};
+  if (!(stockType in ORDERBOOK[stockSymbol]))
+    ORDERBOOK[stockSymbol][stockType] = {};
 
-  if (priceToSell in ORDERBOOK[stockSymbol][stockType]) {
+  if (priceString in ORDERBOOK[stockSymbol][stockType]) {
     ORDERBOOK[stockSymbol][stockType][priceString].total += quantity;
     if (userId in ORDERBOOK[stockSymbol][stockType][priceString].orders) {
       ORDERBOOK[stockSymbol][stockType][priceString].orders[userId] += quantity;
