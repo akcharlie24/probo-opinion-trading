@@ -57,7 +57,6 @@ const STOCK_BALANCES = {
 };
 
 app.post("/user/create/:userId", (req, res) => {
-  console.log("hello");
   const userId = req.params.userId;
 
   if (!userId) {
@@ -96,7 +95,7 @@ app.post("/symbol/create/:stockSymbol", (req, res) => {
     };
   }
 
-  res.status(200).json({ message: `Symbol ${stockSymbol} created` });
+  res.status(201).json({ message: `Symbol ${stockSymbol} created` });
 });
 
 app.get("/orderbook", (req, res) => {
@@ -263,6 +262,8 @@ app.post("/order/sell/no", (req, res) => {
   res.status(200).json({ message: "Sell order placed and pending" });
 });
 
-app.listen(3000, () => {
-  console.log("listening on 3000");
-});
+// app.listen(3000, () => {
+//   console.log("listening on 3000");
+// });
+
+module.exports = app;
