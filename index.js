@@ -285,23 +285,20 @@ app.post("/order/buy", (req, res) => {
   function createReverseSellOrder(priceToMatch, remainingQuantity) {
     let quantity = remainingQuantity;
 
+    // TODO: to lazy must not modify type of priceToMatch
+    priceToMatch = parseFloat(priceToMatch);
+
+    if (stockType === "no") {
+      // TODO: modifying the stockType directly (too lazy) change later
+      stockType = "yes";
+    } else if (stockType === "yes") {
+      stockType = "no";
+    }
+
+    INR_BALANCES[userId].balance -= remainingQuantity * priceToMatch * 100;
+    INR_BALANCES[userId].locked += remainingQuantity * priceToMatch * 100;
+
     const priceToSell = 10 - priceToMatch;
-
-    const userQuantity =
-      STOCK_BALANCES[userId][stockSymbol]?.[stockType]?.quantity;
-
-    if (!userQuantity) {
-      res.status(404).json({ message: "No stocks to sell" });
-      return;
-    }
-
-    if (userQuantity < quantity) {
-      res.status(404).json({ message: "Not enough stocks" });
-      return;
-    }
-
-    STOCK_BALANCES[userId][stockSymbol][stockType].quantity -= quantity;
-    STOCK_BALANCES[userId][stockSymbol][stockType].locked += quantity;
 
     const priceString = priceToSell.toString();
 
@@ -309,22 +306,12 @@ app.post("/order/buy", (req, res) => {
     if (!(stockType in ORDERBOOK[stockSymbol]))
       ORDERBOOK[stockSymbol][stockType] = {};
 
-    if (priceString in ORDERBOOK[stockSymbol][stockType]) {
-      ORDERBOOK[stockSymbol][stockType][priceString].total += quantity;
-      if (userId in ORDERBOOK[stockSymbol][stockType][priceString].orders) {
-        ORDERBOOK[stockSymbol][stockType][priceString].orders[userId] +=
-          quantity;
-      } else
-        ORDERBOOK[stockSymbol][stockType][priceString].orders[userId] =
-          quantity;
-    } else {
-      ORDERBOOK[stockSymbol][stockType][priceString] = {
-        total: quantity,
-        orders: {
-          [userId]: quantity,
-        },
-      };
-    }
+    ORDERBOOK[stockSymbol][stockType][priceString] = {
+      total: quantity,
+      orders: {
+        [userId]: quantity,
+      },
+    };
   }
 
   function matchTrade(priceToMatch) {
@@ -380,10 +367,30 @@ app.post("/order/buy", (req, res) => {
       matchTrade(sortedPrices[0]);
       // TODO: Add message as per cases
       res.status(200).json({ message: "Trade executed" });
+      return;
+    } catch (error) {
+      res.status(404).json({ message: "Transaction Failed" });
+      return;
+    }
+  }
+
+  //normal matching
+  const matchedPrice = pricesAvailable.find((price) => price === priceToBuy);
+
+  if (!matchedPrice) {
+    try {
+      createReverseSellOrder(priceToBuy, quantity);
+      res.status(200).json({ message: "Trade executed successfully" });
+    } catch (error) {
+      res.status(404).json({ message: "Transaction Failed" });
+    }
+  } else {
+    try {
+      matchTrade(matchedPrice);
+      res.status(200).json({ message: "Trade executed successfully" });
     } catch (error) {
       console.log(error);
       res.status(404).json({ message: "Transaction Failed" });
-      return;
     }
   }
 });
