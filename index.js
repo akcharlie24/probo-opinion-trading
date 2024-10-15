@@ -9,7 +9,7 @@ const INR_BALANCES = {
     locked: 0,
   },
   user2: {
-    balance: 200,
+    balance: 2000,
     locked: 10,
   },
 };
@@ -134,18 +134,18 @@ app.get("/balance/stock/:userId", (req, res) => {
 app.post("/order/buy/yes", (req, res) => {});
 
 app.post("/trade/mint", (req, res) => {
-  let { userId, stockSymbol, quantity } = req.body;
+  let { userId, stockSymbol, quantity, price } = req.body;
 
   quantity = parseInt(quantity);
-  const price = quantity * 100;
+  const priceOfTokens = quantity * 2 * price;
   const balance = INR_BALANCES[userId].balance;
 
-  if (price > balance) {
-    res.status(404).json({ message: "Insufficient Balance" });
+  if (priceOfTokens > balance) {
+    res.status(401).json({ message: "Insufficient Balance" });
     return;
   }
 
-  INR_BALANCES[userId].balance -= price;
+  INR_BALANCES[userId].balance -= priceOfTokens;
 
   const userStocks = STOCK_BALANCES[userId];
 
@@ -158,7 +158,7 @@ app.post("/trade/mint", (req, res) => {
             : quantity,
         locked:
           "yes" in STOCK_BALANCES[userId][stockSymbol]
-            ? STOCK_BALANCES[userId][stockSymbol].yes.quantity
+            ? STOCK_BALANCES[userId][stockSymbol].yes.locked
             : 0,
       },
       no: {
@@ -168,27 +168,39 @@ app.post("/trade/mint", (req, res) => {
             : quantity,
         locked:
           "no" in STOCK_BALANCES[userId][stockSymbol]
-            ? STOCK_BALANCES[userId][stockSymbol].no.quantity
+            ? STOCK_BALANCES[userId][stockSymbol].no.locked
             : 0,
+      },
+    };
+  } else {
+    STOCK_BALANCES[userId][stockSymbol] = {
+      yes: {
+        quantity: quantity,
+        locked: 0,
+      },
+      no: {
+        quantity: quantity,
+        locked: 0,
       },
     };
   }
 
-  const remainingBalance = balance - price;
+  const remainingBalance = balance - priceOfTokens;
 
   res.status(200).json({
     message: `Minted ${quantity} 'yes' and 'no' tokens for user ${userId}, remaining balance is ${remainingBalance}`,
   });
 });
 
-app.post("/order/sell/yes", (req, res) => {
-  let { userId, stockSymbol, quantity, price } = req.body;
+app.post("/order/sell", (req, res) => {
+  let { userId, stockSymbol, quantity, price, stockType } = req.body;
 
   quantity = parseInt(quantity);
 
   const priceToSell = price / 100;
 
-  const userQuantity = STOCK_BALANCES[userId][stockSymbol]?.yes?.quantity;
+  const userQuantity =
+    STOCK_BALANCES[userId][stockSymbol]?.[stockType]?.quantity;
 
   if (!userQuantity) {
     res.status(404).json({ message: "No stocks to sell" });
@@ -200,18 +212,21 @@ app.post("/order/sell/yes", (req, res) => {
     return;
   }
 
-  STOCK_BALANCES[userId][stockSymbol].yes.quantity -= quantity;
-  STOCK_BALANCES[userId][stockSymbol].yes.locked += quantity;
+  INR_BALANCES[userId].STOCK_BALANCES[userId][stockSymbol][
+    stockType
+  ].quantity -= quantity;
+  STOCK_BALANCES[userId][stockSymbol][stockType].locked += quantity;
 
   const priceString = priceToSell.toString();
 
-  if (priceToSell in ORDERBOOK[stockSymbol].yes) {
-    ORDERBOOK[stockSymbol].yes[priceString].total += quantity;
-    if (userId in ORDERBOOK[stockSymbol].yes[priceString].orders) {
-      ORDERBOOK[stockSymbol].yes[priceString].orders[userId] += quantity;
-    } else ORDERBOOK[stockSymbol].yes[priceString].orders[userId] = quantity;
+  if (priceToSell in ORDERBOOK[stockSymbol][stockType]) {
+    ORDERBOOK[stockSymbol][stockType][priceString].total += quantity;
+    if (userId in ORDERBOOK[stockSymbol][stockType][priceString].orders) {
+      ORDERBOOK[stockSymbol][stockType][priceString].orders[userId] += quantity;
+    } else
+      ORDERBOOK[stockSymbol][stockType][priceString].orders[userId] = quantity;
   } else {
-    ORDERBOOK[stockSymbol].yes[priceString] = {
+    ORDERBOOK[stockSymbol][stockType][priceString] = {
       total: quantity,
       orders: {
         [userId]: quantity,
@@ -222,48 +237,10 @@ app.post("/order/sell/yes", (req, res) => {
   res.status(200).json({ message: "Sell order placed and pending" });
 });
 
-app.post("/order/sell/no", (req, res) => {
-  let { userId, stockSymbol, quantity, price } = req.body;
+app.post("/order/buy", (req, res) => {});
 
-  quantity = parseInt(quantity);
-
-  const priceToSell = price / 100;
-
-  const userQuantity = STOCK_BALANCES[userId][stockSymbol]?.no?.quantity;
-  if (!userQuantity) {
-    res.status(404).json({ message: "No stocks to sell" });
-    return;
-  }
-
-  if (userQuantity < quantity) {
-    res.status(404).json({ message: "Not enough stocks" });
-    return;
-  }
-
-  STOCK_BALANCES[userId][stockSymbol].no.quantity -= quantity;
-  STOCK_BALANCES[userId][stockSymbol].no.locked += quantity;
-
-  const priceString = priceToSell.toString();
-
-  if (priceToSell in ORDERBOOK[stockSymbol].no) {
-    ORDERBOOK[stockSymbol].no[priceString].total += quantity;
-    if (userId in ORDERBOOK[stockSymbol].no[priceString].orders) {
-      ORDERBOOK[stockSymbol].no[priceString].orders[userId] += quantity;
-    } else ORDERBOOK[stockSymbol].no[priceString].orders[userId] = quantity;
-  } else {
-    ORDERBOOK[stockSymbol].no[priceString] = {
-      total: quantity,
-      orders: {
-        [userId]: quantity,
-      },
-    };
-  }
-
-  res.status(200).json({ message: "Sell order placed and pending" });
+app.listen(3000, () => {
+  console.log("listening on 3000");
 });
 
-// app.listen(3000, () => {
-//   console.log("listening on 3000");
-// });
-
-module.exports = app;
+// module.exports = app;
