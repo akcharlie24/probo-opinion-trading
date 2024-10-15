@@ -219,6 +219,9 @@ app.post("/order/sell", (req, res) => {
 
   const priceString = priceToSell.toString();
 
+  if (!(stockSymbol in ORDERBOOK)) ORDERBOOK[stockSymbol] = {};
+  if (!(stockType in ORDERBOOK)) ORDERBOOK[stockSymbol][stockType] = {};
+
   if (priceToSell in ORDERBOOK[stockSymbol][stockType]) {
     ORDERBOOK[stockSymbol][stockType][priceString].total += quantity;
     if (userId in ORDERBOOK[stockSymbol][stockType][priceString].orders) {
