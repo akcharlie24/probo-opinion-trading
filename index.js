@@ -1,15 +1,34 @@
 const express = require("express");
+const { createClient } = require("redis");
 const app = express();
 
 app.use(express.json());
 
+const client = createClient();
+client.on("error", (err) => console.log("Redis Error", err)).connect();
+
+async function tryRedis() {
+  try {
+    client.lPush("key", "1");
+    client.lPush("key", "2");
+    let arr = [];
+    arr.push(await client.rPop("key"));
+    arr.push(await client.rPop("key"));
+    console.log(arr);
+  } catch (err) {
+    console.log(err);
+  }
+}
+
+tryRedis();
+
 const INR_BALANCES = {
   user1: {
-    balance: 10,
+    balance: 1000000,
     locked: 0,
   },
   user2: {
-    balance: 2000,
+    balance: 2000000000,
     locked: 10,
   },
 };
@@ -97,6 +116,12 @@ app.post("/symbol/create/:stockSymbol", (req, res) => {
   const users = Object.keys(STOCK_BALANCES);
 
   for (const user of users) {
+    // TODO: this is a bad approach as told by sujith (there can be multiple thousand users)
+    // TODO: a stock portfolio should be created only when
+    // 1. user mints on that stock symbol
+    // 2. user buys that stock
+    // One Loophole that stock might not exist
+
     STOCK_BALANCES[user][stockSymbol] = {
       yes: {
         quantity: 0,
@@ -169,6 +194,15 @@ app.post("/trade/mint", (req, res) => {
 
   INR_BALANCES[userId].balance -= priceOfTokens;
 
+  if (!(userId in STOCK_BALANCES)) {
+    STOCK_BALANCES[userId] = {};
+  }
+
+  //Loophole here is that the stockSymbol may yet not be created
+  if (!(stockSymbol in STOCK_BALANCES[userId])) {
+    STOCK_BALANCES[userId][stockSymbol] = {};
+  }
+
   const userStocks = Object.keys(STOCK_BALANCES[userId]);
 
   if (stockSymbol in userStocks) {
@@ -214,7 +248,7 @@ app.post("/trade/mint", (req, res) => {
   });
 });
 
-app.post("/order/sell", (req, res) => {
+app.post("/order/sell", async (req, res) => {
   let { userId, stockSymbol, quantity, price, stockType } = req.body;
 
   quantity = parseInt(quantity);
@@ -258,11 +292,18 @@ app.post("/order/sell", (req, res) => {
     };
   }
 
+  let orderToPush = JSON.stringify({ [stockSymbol]: ORDERBOOK[stockSymbol] });
+  await client.lPush("orderbook", orderToPush);
+
   res.status(200).json({ message: "Sell order placed and pending" });
 });
 
-app.post("/order/buy", (req, res) => {
+app.post("/order/buy", async (req, res) => {
   let { userId, stockSymbol, quantity, price, stockType } = req.body;
+
+  if (!(userId in INR_BALANCES)) {
+    res.status(404).json({ message: "User not found" });
+  }
 
   let balance = INR_BALANCES[userId].balance;
   const totalBuyPrice = quantity * price;
@@ -272,7 +313,7 @@ app.post("/order/buy", (req, res) => {
     return;
   }
   if (!(stockSymbol in ORDERBOOK)) {
-    res.status(404).json({ message: "No such stock exists" });
+    res.status(404).json({ message: "No such stock exists for buying" });
   }
 
   const priceToBuy = parseFloat(price) / 100;
@@ -281,6 +322,24 @@ app.post("/order/buy", (req, res) => {
     (price) => parseFloat(price),
   );
   const sortedPrices = pricesAvailable.sort((a, b) => b - a);
+
+  // prereq to chk if portfolio exists or not
+  if (!(userId in STOCK_BALANCES)) {
+    STOCK_BALANCES[userId] = {};
+  }
+
+  if (!(stockSymbol in STOCK_BALANCES[userId])) {
+    STOCK_BALANCES[userId][stockSymbol] = {
+      yes: {
+        quantity: 0,
+        locked: 0,
+      },
+      no: {
+        quantity: 0,
+        locked: 0,
+      },
+    };
+  }
 
   function createReverseSellOrder(priceToMatch, remainingQuantity) {
     let quantity = remainingQuantity;
@@ -307,8 +366,11 @@ app.post("/order/buy", (req, res) => {
       ORDERBOOK[stockSymbol][stockType] = {};
 
     ORDERBOOK[stockSymbol][stockType][priceString] = {
-      total: quantity,
+      total: ORDERBOOK[stockSymbol][stockType][priceString]?.quantity
+        ? ORDERBOOK[stockSymbol][stockType][priceString].quantity + quantity
+        : quantity,
       orders: {
+        // TODO: check the case if user2 places this order 2 times and update accordingly
         [userId]: quantity,
       },
     };
@@ -320,7 +382,13 @@ app.post("/order/buy", (req, res) => {
     );
     let remainingQuantity = parseFloat(quantity);
     let priceToMatchString = priceToMatch.toString();
+    let totalStocksTraded = 0;
     for (let order of orders) {
+      if (
+        // TODO: its best to delete the user with 0 stocks but here we can simply check
+        ORDERBOOK[stockSymbol][stockType][priceToMatchString].orders[order] == 0
+      )
+        continue;
       if (
         ORDERBOOK[stockSymbol][stockType][priceToMatchString].orders[order] <=
         remainingQuantity
@@ -336,6 +404,12 @@ app.post("/order/buy", (req, res) => {
         INR_BALANCES[userId].balance -= balanceTraded;
         STOCK_BALANCES[order][stockSymbol][stockType].locked -= stocksTraded;
         STOCK_BALANCES[userId][stockSymbol][stockType].quantity += stocksTraded;
+        ORDERBOOK[stockSymbol][stockType][priceToMatchString].orders[order] -=
+          stocksTraded;
+
+        totalStocksTraded += stocksTraded;
+        ORDERBOOK[stockSymbol][stockType][priceToMatchString].total -=
+          totalStocksTraded;
 
         remainingQuantity -= stocksTraded;
         if (remainingQuantity === 0) break;
@@ -347,6 +421,12 @@ app.post("/order/buy", (req, res) => {
         INR_BALANCES[userId].balance -= balanceTraded;
         STOCK_BALANCES[order][stockSymbol][stockType].locked -= stocksTraded;
         STOCK_BALANCES[userId][stockSymbol][stockType].quantity += stocksTraded;
+        ORDERBOOK[stockSymbol][stockType][priceToMatchString].orders[order] -=
+          stocksTraded;
+
+        totalStocksTraded += stocksTraded;
+        ORDERBOOK[stockSymbol][stockType][priceToMatchString].total -=
+          totalStocksTraded;
 
         // TODO: its obvios that it will be 0 here
         remainingQuantity -= stocksTraded;
@@ -366,9 +446,16 @@ app.post("/order/buy", (req, res) => {
     try {
       matchTrade(sortedPrices[0]);
       // TODO: Add message as per cases
+
+      let orderToPush = JSON.stringify({
+        [stockSymbol]: ORDERBOOK[stockSymbol],
+      });
+      await client.lPush("orderbook", orderToPush);
+
       res.status(200).json({ message: "Trade executed" });
       return;
     } catch (error) {
+      console.log(error);
       res.status(404).json({ message: "Transaction Failed" });
       return;
     }
@@ -380,6 +467,12 @@ app.post("/order/buy", (req, res) => {
   if (!matchedPrice) {
     try {
       createReverseSellOrder(priceToBuy, quantity);
+
+      let orderToPush = JSON.stringify({
+        [stockSymbol]: ORDERBOOK[stockSymbol],
+      });
+      await client.lPush("orderbook", orderToPush);
+
       res.status(200).json({ message: "Trade executed successfully" });
     } catch (error) {
       res.status(404).json({ message: "Transaction Failed" });
@@ -387,6 +480,12 @@ app.post("/order/buy", (req, res) => {
   } else {
     try {
       matchTrade(matchedPrice);
+
+      let orderToPush = JSON.stringify({
+        [stockSymbol]: ORDERBOOK[stockSymbol],
+      });
+      await client.lPush("orderbook", orderToPush);
+
       res.status(200).json({ message: "Trade executed successfully" });
     } catch (error) {
       console.log(error);
