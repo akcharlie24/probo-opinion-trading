@@ -360,6 +360,7 @@ app.post("/order/buy", async (req, res) => {
     INR_BALANCES[userId].balance -= quantity * priceToMatch * 100;
     INR_BALANCES[userId].locked += quantity * priceToMatch * 100;
 
+    // TODO: sanitization to check prices >= 10
     const priceToSell = 10 - priceToMatch;
 
     const priceString = priceToSell.toString();
