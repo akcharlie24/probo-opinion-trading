@@ -9,8 +9,8 @@ client.on("error", (err) => console.log("Redis Error", err)).connect();
 
 async function tryRedis() {
   try {
-    client.lPush("key", "1");
-    client.lPush("key", "2");
+    await client.lPush("key", "1");
+    await client.lPush("key", "2");
     let arr = [];
     arr.push(await client.rPop("key"));
     arr.push(await client.rPop("key"));
@@ -44,7 +44,7 @@ const ORDERBOOK = {
         },
       },
       8.5: {
-        total: 12,
+        total: 6,
         orders: {
           user1: 3,
           user2: 3,
@@ -76,7 +76,7 @@ const STOCK_BALANCES = {
       },
       yes: {
         quantity: 2,
-        locked: 1,
+        locked: 13,
       },
     },
   },
@@ -117,7 +117,7 @@ app.post("/symbol/create/:stockSymbol", (req, res) => {
 
   for (const user of users) {
     // TODO: this is a bad approach as told by sujith (there can be multiple thousand users)
-    // TODO: a stock portfolio should be created only when
+    //  a stock portfolio should be created only when
     // 1. user mints on that stock symbol
     // 2. user buys that stock
     // One Loophole that stock might not exist
@@ -278,7 +278,10 @@ app.post("/order/sell", async (req, res) => {
     ORDERBOOK[stockSymbol][stockType] = {};
 
   if (priceString in ORDERBOOK[stockSymbol][stockType]) {
+    // TODO: CHECK can there be a case where there can be a price string but no total / orders ?
+
     ORDERBOOK[stockSymbol][stockType][priceString].total += quantity;
+
     if (userId in ORDERBOOK[stockSymbol][stockType][priceString].orders) {
       ORDERBOOK[stockSymbol][stockType][priceString].orders[userId] += quantity;
     } else
@@ -354,8 +357,8 @@ app.post("/order/buy", async (req, res) => {
       stockType = "no";
     }
 
-    INR_BALANCES[userId].balance -= remainingQuantity * priceToMatch * 100;
-    INR_BALANCES[userId].locked += remainingQuantity * priceToMatch * 100;
+    INR_BALANCES[userId].balance -= quantity * priceToMatch * 100;
+    INR_BALANCES[userId].locked += quantity * priceToMatch * 100;
 
     const priceToSell = 10 - priceToMatch;
 
@@ -366,12 +369,16 @@ app.post("/order/buy", async (req, res) => {
       ORDERBOOK[stockSymbol][stockType] = {};
 
     ORDERBOOK[stockSymbol][stockType][priceString] = {
-      total: ORDERBOOK[stockSymbol][stockType][priceString]?.quantity
-        ? ORDERBOOK[stockSymbol][stockType][priceString].quantity + quantity
+      total: ORDERBOOK[stockSymbol][stockType]?.[priceString]?.total
+        ? ORDERBOOK[stockSymbol][stockType][priceString].total + quantity
         : quantity,
       orders: {
-        // TODO: check the case if user2 places this order 2 times and update accordingly
-        [userId]: quantity,
+        [userId]: ORDERBOOK[stockSymbol][stockType]?.[priceString]?.orders[
+          userId
+        ]
+          ? (ORDERBOOK[stockSymbol][stockType][priceString].orders[userId] +=
+              quantity)
+          : quantity,
       },
     };
   }
@@ -408,8 +415,6 @@ app.post("/order/buy", async (req, res) => {
           stocksTraded;
 
         totalStocksTraded += stocksTraded;
-        ORDERBOOK[stockSymbol][stockType][priceToMatchString].total -=
-          totalStocksTraded;
 
         remainingQuantity -= stocksTraded;
         if (remainingQuantity === 0) break;
@@ -425,14 +430,14 @@ app.post("/order/buy", async (req, res) => {
           stocksTraded;
 
         totalStocksTraded += stocksTraded;
-        ORDERBOOK[stockSymbol][stockType][priceToMatchString].total -=
-          totalStocksTraded;
 
         // TODO: its obvios that it will be 0 here
         remainingQuantity -= stocksTraded;
         if (remainingQuantity === 0) break;
       }
     }
+    ORDERBOOK[stockSymbol][stockType][priceToMatchString].total -=
+      totalStocksTraded;
 
     if (remainingQuantity === 0) return;
     else {
