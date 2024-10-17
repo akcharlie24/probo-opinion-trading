@@ -8,63 +8,63 @@ const client = createClient();
 client.on("error", (err) => console.log("Redis Error", err)).connect();
 
 const INR_BALANCES = {
-  user1: {
-    balance: 1000000,
-    locked: 0,
-  },
-  user2: {
-    balance: 2000000000,
-    locked: 10,
-  },
+  // user1: {
+  //   balance: 1000000,
+  //   locked: 0,
+  // },
+  // user2: {
+  //   balance: 2000000000,
+  //   locked: 10,
+  // },
 };
 
 const ORDERBOOK = {
-  BTC_USDT_10_Oct_2024_9_30: {
-    yes: {
-      9.5: {
-        total: 12,
-        orders: {
-          user1: 2,
-          user2: 10,
-        },
-      },
-      8.5: {
-        total: 6,
-        orders: {
-          user1: 3,
-          user2: 3,
-        },
-      },
-    },
-    no: {},
-  },
+  // BTC_USDT_10_Oct_2024_9_30: {
+  //   yes: {
+  //     9.5: {
+  //       total: 12,
+  //       orders: {
+  //         user1: 2,
+  //         user2: 10,
+  //       },
+  //     },
+  //     8.5: {
+  //       total: 6,
+  //       orders: {
+  //         user1: 3,
+  //         user2: 3,
+  //       },
+  //     },
+  //   },
+  //   no: {},
+  // },
 };
 
 const STOCK_BALANCES = {
-  user1: {
-    BTC_USDT_10_Oct_2024_9_30: {
-      yes: {
-        quantity: 5,
-        locked: 5,
-      },
-      no: {
-        quantity: 0,
-        locked: 0,
-      },
-    },
-  },
-  user2: {
-    BTC_USDT_10_Oct_2024_9_30: {
-      no: {
-        quantity: 0,
-        locked: 0,
-      },
-      yes: {
-        quantity: 2,
-        locked: 13,
-      },
-    },
-  },
+  // user1: {
+  //   BTC_USDT_10_Oct_2024_9_30: {
+  //     yes: {
+  //       quantity: 5,
+  //       locked: 5,
+  //     },
+  //     no: {
+  //       quantity: 0,
+  //       locked: 0,
+  //     },
+  //   },
+  // },
+  // user2: {
+  //   BTC_USDT_10_Oct_2024_9_30: {
+  //     no: {
+  //       quantity: 0,
+  //       locked: 0,
+  //     },
+  //     yes: {
+  //       quantity: 2,
+  //       locked: 13,
+  //     },
+  //   },
+  // },
 };
 
 app.post("/user/create/:userId", (req, res) => {
@@ -473,6 +473,7 @@ app.post("/order/buy", async (req, res) => {
   } else {
     try {
       matchTrade(matchedPrice);
+      // TODO: even if matching occures we need to check if its availabale at lower price
 
       let orderToPush = JSON.stringify({
         [stockSymbol]: ORDERBOOK[stockSymbol],
