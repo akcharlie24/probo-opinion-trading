@@ -7,21 +7,6 @@ app.use(express.json());
 const client = createClient();
 client.on("error", (err) => console.log("Redis Error", err)).connect();
 
-async function tryRedis() {
-  try {
-    await client.lPush("key", "1");
-    await client.lPush("key", "2");
-    let arr = [];
-    arr.push(await client.rPop("key"));
-    arr.push(await client.rPop("key"));
-    console.log(arr);
-  } catch (err) {
-    console.log(err);
-  }
-}
-
-tryRedis();
-
 const INR_BALANCES = {
   user1: {
     balance: 1000000,
@@ -167,7 +152,9 @@ app.post("/onramp/inr", (req, res) => {
   INR_BALANCES[userId].balance =
     INR_BALANCES[userId].balance + parseInt(amount);
 
-  res.status(200).json({ message: `Onramped ${userId} with amount 50000` });
+  res
+    .status(200)
+    .json({ message: `Onramped ${userId} with amount ${parseInt(amount)}` });
 });
 
 app.get("/balance/stock/:userId", (req, res) => {
