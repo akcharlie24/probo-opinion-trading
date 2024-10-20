@@ -435,6 +435,7 @@ app.post("/order/buy", async (req, res) => {
   }
 
   //lowest match
+  // TODO: modify this case to be a recursive bestmatch -> even in case of matchedPrice
   if (priceToBuy > sortedPrices[0]) {
     try {
       matchTrade(sortedPrices[0]);

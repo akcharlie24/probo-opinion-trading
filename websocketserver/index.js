@@ -30,20 +30,9 @@ async function pullOrders() {
                 webSocket.send(JSON.stringify(orderbook));
             }
           }
-
-          // wss.clients.forEach(function each(client) {
-          //   console.log(client);
-          //   if (client.readyState === WebSocket.OPEN) {
-          //     client.send("hi");
-          //   }
-          // });
-
-          // TODO: logic to notify all rooms with orders
-          // TODO: add debouncing
-          // TODO: One problem -> as we are popping orderbooks -> how will new users get the same orderbook when he subscribes coz its aleardy popped ?
         }
       } catch (error) {
-        console.error("Error processing submission:", error);
+        console.error("Error processing order : ", error);
       }
     }
   } catch (error) {
